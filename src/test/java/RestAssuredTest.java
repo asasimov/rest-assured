@@ -3,13 +3,8 @@ import app.Book;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.restassured.builder.RequestSpecBuilder;
-import io.restassured.filter.log.LogDetail;
-import io.restassured.http.ContentType;
 import io.restassured.response.Response;
-import io.restassured.specification.RequestSpecification;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
@@ -20,25 +15,11 @@ import static org.apache.http.HttpStatus.SC_CREATED;
 import static org.apache.http.HttpStatus.SC_OK;
 
 
-public class RestAssuredTest {
+public class RestAssuredTest extends TestCase {
 
-    private static RequestSpecification requestSpec;
-
-    private ObjectMapper mapper = new ObjectMapper();
     private String userName;
-    private  Account account;
-    private  Book book;
-
-    @BeforeClass
-    public static void createSpecification() {
-        requestSpec = new RequestSpecBuilder()
-                .setBaseUri("http://localhost")
-                .setPort(8080)
-                .setAccept(ContentType.JSON)
-                .setContentType(ContentType.JSON)
-                .log(LogDetail.BODY)
-                .build();
-    }
+    private Account account;
+    private Book book;
 
     @Before
     public void setEntities() {
@@ -71,11 +52,6 @@ public class RestAssuredTest {
         this.addBookForUser(book, userName);
         this.deleteUserBook(userName, getLastBookId());
         this.removeUser(userName);
-    }
-
-    private void addUser(Account user) throws JsonProcessingException {
-        Response response = given(requestSpec).body(mapper.writeValueAsBytes(user)).post(EndPoints.ADD_USER);
-        response.then().statusCode(SC_CREATED).log();
     }
 
     private void removeUser(String userName){

@@ -65,6 +65,15 @@ class UserRestController {
                 .buildAndExpand(result.get().getId()).toUri());
         return new ResponseEntity<>(null, httpHeaders, HttpStatus.OK);
     }
+
+    @RequestMapping(value = "/changeUser/{userId}", method = RequestMethod.PUT)
+    ResponseEntity<?> changeUser(@PathVariable String userId, @RequestBody Account account) {
+        return this.accountRepository.findByUsername(userId).map(a -> {
+            a.setUsername(account.getUsername());
+            this.accountRepository.save(a);
+            return new ResponseEntity<>(null, HttpStatus.OK);
+        }).get();
+    }
 }
 
 
