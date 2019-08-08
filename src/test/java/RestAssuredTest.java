@@ -1,15 +1,19 @@
 import app.Account;
 import app.Book;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.restassured.builder.RequestSpecBuilder;
+import io.restassured.filter.log.LogDetail;
 import io.restassured.http.ContentType;
 import io.restassured.response.Response;
 import io.restassured.specification.RequestSpecification;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.junit.After;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.List;
+import java.util.UUID;
 
 import static io.restassured.RestAssured.given;
 import static org.apache.http.HttpStatus.SC_CREATED;
@@ -17,63 +21,91 @@ import static org.apache.http.HttpStatus.SC_OK;
 
 
 public class RestAssuredTest {
-    private static Account account;
 
-    private static int counter = 2;
+    private static RequestSpecification requestSpec;
 
-    @Before
-    public void postUser() throws JsonProcessingException {
-        ObjectMapper mapper = new ObjectMapper();
-        String url = "http://localhost:8080/user/addUser";
-        account = new Account("Bob", "password");
-        RequestSpecification requestSpecification = given().contentType(ContentType.JSON).body(mapper.writeValueAsBytes(account));
-        Response response = requestSpecification.post(url);
-        response.prettyPrint();
-        response.then()
-                .statusCode(SC_CREATED)
-                .log();
+    private ObjectMapper mapper = new ObjectMapper();
+    private String userName;
+    private  Account account;
+    private  Book book;
 
+    @BeforeClass
+    public static void createSpecification() {
+        requestSpec = new RequestSpecBuilder()
+                .setBaseUri("http://localhost")
+                .setPort(8080)
+                .setAccept(ContentType.JSON)
+                .setContentType(ContentType.JSON)
+                .log(LogDetail.BODY)
+                .build();
     }
 
-    @After
-    public void removeUser() {
-        String url = "http://localhost:8080/user/removeUser/Bob";
-        RequestSpecification requestSpecification = given().contentType(ContentType.JSON);
-        Response response = requestSpecification.delete(url);
-        response.prettyPrint();
-        response.then()
-                .statusCode(SC_OK)
-                .log();
+    @Before
+    public void setEntities() {
+        userName = UUID.randomUUID().toString();
+        account = new Account(userName, "password");
+        book = new Book(account, "Anna Karenina", "Leo Tolstoy", "description");
     }
 
     @Test
-    public void postAndRemoveBook() throws JsonProcessingException, JSONException {
-        ObjectMapper mapper = new ObjectMapper();
-        String url = "http://localhost:8080/Bob/books";
-        Book book = new Book(account, "Anna Karenina", "Leo Tolstoy", "description");
-        RequestSpecification requestSpecification = given().contentType(ContentType.JSON).body(mapper.writeValueAsBytes(book));
-        Response response = requestSpecification.post(url);
-        response.prettyPrint();
-        response.then()
-                .statusCode(SC_CREATED)
-                .log();
-        url = "http://localhost:8080/Bob/books/removeBook/" + (Integer.parseInt(getLastId()) + 1);
-        counter = counter + 2;
-        requestSpecification = given().contentType(ContentType.JSON);
-        response = requestSpecification.delete(url);
-        response.prettyPrint();
-        response.then()
-                .statusCode(SC_OK)
-                .log();
+    public void addUser() throws JsonProcessingException {
+        this.addUser(account);
     }
 
-    private String getLastId() throws JSONException {
-        String url = "http://localhost:8080/user/allUsers";
-        RequestSpecification requestSpecification = given().contentType(ContentType.JSON);
-        Response response = requestSpecification.get(url);
-        response.prettyPrint();
-        JSONArray jsonResponse = new JSONArray(response.asString());
-        return jsonResponse.getJSONObject(0).getString("id");
+    @Test
+    public void addBook() throws JsonProcessingException {
+        this.addUser(account);
+        this.addBookForUser(book, userName);
     }
 
+    @Test
+    public void removeBook() throws Exception {
+        this.addUser(account);
+        this.addBookForUser(book, userName);
+        this.deleteUserBook(userName, getLastBookId());
+    }
+
+    @Test
+    public void removeUser() throws Exception {
+        this.addUser(account);
+        this.addBookForUser(book, userName);
+        this.deleteUserBook(userName, getLastBookId());
+        this.removeUser(userName);
+    }
+
+    private void addUser(Account user) throws JsonProcessingException {
+        Response response = given(requestSpec).body(mapper.writeValueAsBytes(user)).post(EndPoints.ADD_USER);
+        response.then().statusCode(SC_CREATED).log();
+    }
+
+    private void removeUser(String userName){
+        Response response = given(requestSpec).delete(EndPoints.REMOVE_USER, userName);
+        response.prettyPrint();
+        response.then().statusCode(SC_OK).log();
+    }
+
+    private void addBookForUser(Book book, String userName) throws JsonProcessingException {
+        Response response = given(requestSpec).body(mapper.writeValueAsBytes(book)).post(EndPoints.ADD_BOOK, userName);
+        response.prettyPrint();
+        response.then().statusCode(SC_CREATED).log();
+    }
+
+    private void deleteUserBook(String userName, long bookId){
+        Response response = given(requestSpec).delete(EndPoints.REMOVE_BOOK, userName, bookId);
+        response.prettyPrint();
+        response.then().statusCode(SC_OK).log();
+    }
+
+    private long getLastBookId() throws Exception {
+        Response response = given(requestSpec).get(EndPoints.GET_USERS);
+        List<Account> accounts = eitherObjectOrList(response.asString(), Account.class);
+        return accounts.get(accounts.size() - 1).getBooks().iterator().next().getId();
+    }
+
+    private <A> List<A> eitherObjectOrList(String content, Class<A> c) throws Exception {
+        mapper.configure(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY, true);
+        return mapper.readValue(
+                content, mapper.getTypeFactory().constructCollectionType(List.class, c)
+        );
+    }
 }
